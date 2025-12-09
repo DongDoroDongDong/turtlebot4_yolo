@@ -72,6 +72,12 @@ class Yolov5Node(Node):
         self._frame = 0
 
     def image_cb(self, msg: Image):
+        # Run inference every other frame to reduce load.
+        process_frame = (self._frame % 2 == 0)
+        self._frame += 1
+        if not process_frame:
+            return
+
         # ROS Image -> OpenCV(BGR)
         img_bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
@@ -148,4 +154,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
