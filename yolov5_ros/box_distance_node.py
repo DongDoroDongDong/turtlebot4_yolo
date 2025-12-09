@@ -17,14 +17,28 @@ class BoxDistanceNode(Node):
         self.declare_parameter('detections_topic', '/yolov5/detections')
         self.declare_parameter('target_class', '')      # '' 이면 모든 클래스 허용
         self.declare_parameter('min_conf', 0.3)
+
+        # 구(old) 1/d 모델용 파라미터 (호환성 유지 차원에서만 남겨둠)
         self.declare_parameter('ref_distance', 0.6)     # [m] 기준 거리
         self.declare_parameter('ref_height_px', 120.0)  # [px] 기준 픽셀 높이
+
+        # 새 모델 d = a + b / S (S: bbox height[px])
+        # 실측 데이터(1~3m) 기반으로 피팅한 기본값:
+        #   a ≈ -0.235, b ≈ 102.376
+        self.declare_parameter('model_a', -0.235)
+        self.declare_parameter('model_b', 102.376)
 
         self.detections_topic = self.get_parameter('detections_topic').value
         self.target_class = self.get_parameter('target_class').value.strip()
         self.min_conf = float(self.get_parameter('min_conf').value)
+
+        # 호환성용 (현재 계산에는 사용하지 않음)
         self.ref_distance = float(self.get_parameter('ref_distance').value)
         self.ref_height_px = float(self.get_parameter('ref_height_px').value)
+
+        # 보정된 모델 계수
+        self.model_a = float(self.get_parameter('model_a').value)
+        self.model_b = float(self.get_parameter('model_b').value)
 
         # --------------------
         # ROS I/O
@@ -43,12 +57,11 @@ class BoxDistanceNode(Node):
         )
 
         self.get_logger().info(
-            f'BoxDistanceNode started. '
-            f'detections_topic={self.detections_topic}, '
-            f'ref_distance={self.ref_distance} m, '
-            f'ref_height_px={self.ref_height_px} px, '
-            f'min_conf={self.min_conf}, '
-            f'target_class="{self.target_class or "ANY"}"'
+            'BoxDistanceNode started.\n'
+            f'  detections_topic = {self.detections_topic}\n'
+            f'  min_conf        = {self.min_conf}\n'
+            f'  target_class    = "{self.target_class or "ANY"}"\n'
+            f'  model: d = a + b / S, a = {self.model_a:.4f}, b = {self.model_b:.4f}'
         )
 
     # ---------------------------------------------------------------
@@ -104,8 +117,13 @@ class BoxDistanceNode(Node):
             # 의미 없는 값
             return
 
-        # 거리 추정: d = d_ref * h_ref / h_meas
-        distance = self.ref_distance * self.ref_height_px / height_px
+        # 보정된 거리 추정 모델:
+        #   d_est = a + b / S,  S = bbox height [px]
+        distance = self.model_a + self.model_b / height_px
+
+        # 보호막: 음수 거리는 없으니까 0으로 컷
+        if distance < 0.0:
+            distance = 0.0
 
         # publish
         out = PointStamped()
