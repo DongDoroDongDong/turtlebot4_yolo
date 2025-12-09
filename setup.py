@@ -23,7 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'yolov5_node = yolov5_ros.yolov5_node:main',
+            'yolov5_inference_node = yolov5_ros.yolov5_node:main',
+            'yolov5_distance_node = yolov5_ros.box_distance_node:main',
         ],
     },
 )
